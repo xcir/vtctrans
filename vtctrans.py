@@ -301,7 +301,7 @@ class VarnishTest:
 			ret['result']   = 'FAILED'
 			ret['vtcname']  = data['msg'].split(' ',2)[0]
 		elif data['msg'].startswith('Unknown command: '):
-			self.addError(data['msg'].replace('Unknown command','Unknown command(VTCSyntaxError)'), ret)
+			#self.addError(data['msg'].replace('Unknown command','Unknown command(VTCSyntaxError)'), ret)
 			data['subcomp'] = 'Unknown command(VTCSyntaxError)'
 			data['msg']     = data['msg'].replace('Unknown command: ','')
 
