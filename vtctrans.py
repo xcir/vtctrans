@@ -1,5 +1,5 @@
 # coding: utf-8
-import re,copy,sys,commands
+import re,copy,sys,commands,hashlib
 
 def main():
 	vtc  = VarnishTest()
@@ -43,8 +43,11 @@ class VarnishTest:
 	event = {
 		'varnishtest':{
 #			'completed'       : 'Test completed',
+			'sema'            : 'Semaphore sync',
+			'delaying'        : 'Sleep',
 			},
 		'server'     :{
+			'sema'            : 'Semaphore sync',
 			'Starting server' : 'Starting server %comp%',
 			'Started on '     : 'Started server %comp%',
 			'accepted fd '    : 'Accepted Request %comp% <- todo(write sock)',
@@ -56,13 +59,16 @@ class VarnishTest:
 			'wait-running'    : 'Wait running %comp%',
 			'stop'            : 'Stop varnish %comp%',
 			'Stopping Child'  : 'Stop varnish child process %comp%',
+			'delaying'        : 'Sleep',
 			},
 		'client'     :{
+			'sema'            : 'Semaphore sync',
 			'rxresp'          : 'Return response %comp%',
 			'Starting client' : 'Starting client %comp%',
 			'Connect to '     : 'Connecting %comp% -> todo(write sock)',
 			'connected fd '   : 'Send Request %comp% -> todo(write sock)',
 			'Ending'          : 'End client %comp%',
+			'delaying'        : 'Sleep',
 			}
 	}
 	
@@ -161,7 +167,35 @@ class VarnishTest:
 			tmp['httpdata'] = data['httpdata']
 		ret['expect'].append(tmp)
 	
-	
+	def mergeExpect(self, ret):
+		if not ret.has_key('expect'):
+			return
+		ret['mergeExpect'] = {}
+		for v in ret['expect']:
+			#gen hash
+			httpdata = str(v['httpdata']['length'])
+			for vv in v['httpdata']['body']:
+				httpdata += vv
+			for vv in v['httpdata']['head']:
+				httpdata += vv
+			key = hashlib.md5(httpdata).hexdigest()
+			
+			if not ret['mergeExpect'].has_key(key):
+				ret['mergeExpect'][key] = {}
+				ret['mergeExpect'][key]['httpdata'] = v['httpdata']
+				ret['mergeExpect'][key]['expect']   = []
+				ret['mergeExpect'][key]['comp']     = v['comp']
+			
+			ret['mergeExpect'][key]['expect'].append({
+				'operator' : v['operator'],
+				'result'   : v['result'],
+				's1_key'   : v['s1_key'],
+				's1_val'   : v['s1_val'],
+				's2_key'   : v['s2_key'],
+				's2_val'   : v['s2_val'],
+				})
+			
+		
 	#マクロ定義を作成
 	def conMacro(self, data, ret):
 		if not 'macro' in ret:
@@ -407,12 +441,10 @@ class VarnishTest:
 			ret['error'] = []
 		ret['error'].append(msg)
 
-	#exec varnishtest
-	def runvtc(self, opt):
-		org = commands.getoutput(self.vtc + ' ' + opt)
-		if not re.search('^[-*#]',org):
-			return {'mode':'cmd','data':org}
-		r   = org.splitlines()
+	def parseVTC(self, txt):
+		if not re.search('^[-*#]',txt):
+			return {'mode':'cmd','data':txt}
+		r   = txt.splitlines()
 		
 		i = 0
 		ret = {'mode':'vtc','line':[]}
@@ -424,13 +456,23 @@ class VarnishTest:
 		
 		return ret
 
+	#exec varnishtest
+	def runVTC(self, opt):
+		return commands.getoutput(self.vtc + ' ' + opt)
+
+
 	############################
 	#Complex functions
 	############################
 
 	def execVarnishTest(self, opt):
-		#vtc実行
-		r= self.runvtc(opt)
+		if not -1 == opt.find('-S'):
+			#STDINから読み込む
+			r= self.parseVTC('\n'.join(sys.stdin.readlines()))
+		else:
+			#vtc実行
+			r= self.parseVTC(self.runVTC(opt))
+		
 		if r['mode'] == 'cmd':
 			print r['data']
 			return
@@ -446,6 +488,8 @@ class VarnishTest:
 			self.afterFilterData(v)
 			#イベントデータの作成
 			self.constructEvent(v)
+			#expectデータのマージ
+			self.mergeExpect(v)
 			
 			#出力
 			self.printVTC(v)
@@ -485,7 +529,7 @@ class VarnishTest:
 		
 	def printMainLine(self, data):
 		self.printLine('-')
-		print("Test start")
+		print("<<<< Test start >>>>")
 		
 		#iline  = data['line']
 		#event = data['event']
@@ -514,9 +558,11 @@ class VarnishTest:
 		
 		for v in data['line']:
 			if nowEvent < v['event']:
-				self.printLine('-')
+				#self.printLine('-')
 				nowEvent = v['event']
-				print(data['event'][nowEvent])
+				print '\n<<<< ',
+				print(data['event'][nowEvent]),
+				print ' >>>>'
 
 			subcomp = ''
 			if v.has_key('aliassubcomp'):
@@ -526,6 +572,8 @@ class VarnishTest:
 			
 			sc  = ' ' * (evMaxComp[nowEvent] - len(v['comp']))
 			ssc = ' ' * (evMaxSubComp[nowEvent] - len(subcomp))
+			print v['raw']
+			'''
 			print "  | %s%s | %s%s | %s" % (
 				v['comp'],
 				sc,
@@ -534,6 +582,8 @@ class VarnishTest:
 				v['msg'],
 				
 				)
+			'''
+		print
 
 	
 	def printKV(self, dic, title = '' , desc = '' , dmt = '|', mgn = 2):
@@ -571,19 +621,62 @@ class VarnishTest:
 		#print ' '* 10 + ' -'+ '-' * length + '-'
 	
 	def printExpect(self, data):
-		if not data.has_key('expect'):
+		if not data.has_key('mergeExpect'):
 			return
 		'''
-		
-		| s1 | match | req.url == /
-		             | / == /
-		| s1 | faild | req.url == /
-		             | hoge == /
+			----------------------------------------------------------------------
+			c2 expect
+			----------------------------------------------------------------------
+			HTTP:header     | HTTP/1.1
+			                | 200
+			                | Ok
+			                | Cache-control: max-age = 1
+			                | Connection: keep-alive
+			HTTP:body       | 22222\n
+			HTTP:bodylen    | 6
+			                |
+			expr[1]         | resp.http.content-length == 6
+			expr[1](val)    | 6 == 6
+			expr[1](result) | match
+			                |
+			expr[2]         | resp.http.content-length == 6
+			expr[2](val)    | 6 == 6
+			expr[2](result) | match
+			----------------------------------------------------------------------
 		'''
 		self.printLine('#')
 		print 'Expect list'
 		self.printLine()
-		
+
+		for k,v in data['mergeExpect'].items():
+			print v['comp'] + ' expect (' + k + ')'
+			self.printLine()
+
+			#print http header body length
+			length = len(str(len(v['httpdata']['head']))) + len('EXPECT[]:result')
+
+			if len(v['httpdata']['head']) > 0:
+				print 'HTTP:header' + (length - len('HTTP:header')) * ' ' + ' |' + '-' * 40
+				for vv in v['httpdata']['head']:
+					print length * ' ' + ' | ' + vv
+			if len(v['httpdata']['body']) > 0:
+				print 'HTTP:body' + (length - len('HTTP:body')) * ' ' + ' |' + '-' * 40
+				for vv in v['httpdata']['body']:
+					print length * ' ' + ' | ' + vv
+			print 'HTTP:bodylen' + (length - len('HTTP:bodylen')) * ' ' + ' |' + '-' * 40
+			print length * ' ' + ' | ' + str(v['httpdata']['length'])
+
+			#print expect
+			i = 0
+			for vv in v['expect']:
+				km = 'EXPECT[' + str(i) + ']'
+				print km  + (length - len(km)) * ' ' + ' |' + '-' * 40
+				print km + ':expr' + (length - len(km + ':expr')) * ' ' + ' | ' + vv['s1_key'] + " " + vv['operator'] + " " + vv['s1_val']
+				print km + ':val' + (length - len(km + ':val')) * ' ' + ' | ' + vv['s2_key'] + " " + vv['operator'] + " " + vv['s2_val']
+				print km + ':result' + (length - len(km + ':result')) * ' ' + ' | ' + vv['result']
+				i += 1
+			self.printLine()
+		'''
 		maxComp = len('[compornent]')
 		maxRes  = len('HTTP:bodylen')
 		exp = data['expect']
@@ -613,17 +706,7 @@ class VarnishTest:
 			print fmt  % ('', 'expr(val)', v['s1_val'], v['operator'], v['s2_val'])
 			self.printLine()
 		print
-	
-
-main()
-
-
-
-
-
-
-
-
+		'''
 
 #---------------------------------------------------------------------------------------------------
 # ref:http://tomoemon.hateblo.jp/entry/20090921/p1
@@ -673,3 +756,5 @@ def dump(obj):
   return newobj
 
 #---------------------------------------------------------------------------------------------------
+
+main()
