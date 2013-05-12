@@ -128,32 +128,52 @@ class VarnishTest:
 	
 	# 構造作成のメインループ
 	def constructData(self, data):
+		idx  = 0
+		skip = 0
 		for v in data['line']:
+			if skip > 0:
+				skip -= 1
+				idx  += 1
+				continue
 			comptype = v['comptype']
 			subcomp  = v['subcomp']
 			if subcomp in self.vtcfunc[comptype]:
-				self.vtcfunc[comptype][subcomp](v, data)
+				skip = self.vtcfunc[comptype][subcomp](v, data, idx)
+			idx += 1
 			
 
 	# VarnishCLIのまとめ
-	def renameVarnishCLI(self, data, ret):
+	def renameVarnishCLI(self, data, ret, idx):
 		if data['subcomp'] == 'CLI RX':
 			data['aliassubcomp'] =  'CLI:' + data['comp'] + ' <- ' +  data['comp']
 		elif data['subcomp'] == 'CLI RX:RES':
 			data['aliassubcomp'] =  'CLI:' + data['comp'] + ' <- ' +  data['comp'] + "(Result)"
 		else:
 			data['aliassubcomp'] =  'CLI:' + data['comp'] + ' -> ' +  data['comp']
+		return 0
 	
 	# EXPECTのまとめ
-	def conExpect(self, data, ret):
+	def conExpect(self, data, ret, idx):
 		if not 'expect' in ret:
 			ret['expect'] = []
 		#   1      2   3 4  5   6
 		# req.url (/) == / (/) match
 		# @@
+		skip = 0
 		m = self.rexp.search(data['msg'])
 		if not m:
-			return
+			#複数行パタン
+			cnt = len(ret['line'])
+			nc  = idx + 1
+			while nc < cnt:
+				if not ret['line'][nc]['comp'] == 'shell':
+					return 0
+				skip += 1
+				data['msg'] = data['msg'] + '<RETURN>' + ret['line'][nc]['msg']
+				m = self.rexp.search(data['msg'])
+				if m:
+					break
+				nc += 1
 		
 		tmp = {
 			'comp'     : data['comp'],
@@ -167,6 +187,7 @@ class VarnishTest:
 		if data.has_key('httpdata'):
 			tmp['httpdata'] = data['httpdata']
 		ret['expect'].append(tmp)
+		return skip
 	
 	def mergeExpect(self, ret):
 		if not ret.has_key('expect'):
@@ -197,11 +218,12 @@ class VarnishTest:
 				})
 		
 	#マクロ定義を作成
-	def conMacro(self, data, ret):
+	def conMacro(self, data, ret, idx):
 		if not 'macro' in ret:
 			ret['macro'] = {}
 		tmp = data['msg'].split('=', 2)
 		ret['macro'][tmp[0]] = tmp[1]
+		return 0
 
 	
 	def parseLine(self, line, idx = 0):
