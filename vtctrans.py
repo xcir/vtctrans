@@ -154,6 +154,7 @@ class VarnishTest:
 		m = self.rexp.search(data['msg'])
 		if not m:
 			return
+		
 		tmp = {
 			'comp'     : data['comp'],
 			's1_key'   : m.group(1),
@@ -194,7 +195,6 @@ class VarnishTest:
 				's2_key'   : v['s2_key'],
 				's2_val'   : v['s2_val'],
 				})
-			
 		
 	#マクロ定義を作成
 	def conMacro(self, data, ret):
@@ -671,8 +671,8 @@ class VarnishTest:
 			for vv in v['expect']:
 				km = 'EXPECT[' + str(i) + ']'
 				print km  + (length - len(km)) * ' ' + ' |' + '-' * 40
-				print km + ':expr' + (length - len(km + ':expr')) * ' ' + ' | ' + vv['s1_key'] + " " + vv['operator'] + " " + vv['s1_val']
-				print km + ':val' + (length - len(km + ':val')) * ' ' + ' | ' + vv['s2_key'] + " " + vv['operator'] + " " + vv['s2_val']
+				print km + ':expr' + (length - len(km + ':expr')) * ' ' + ' | ' + vv['s1_key'] + " " + vv['operator'] + " " + vv['s2_key']
+				print km + ':val' + (length - len(km + ':val')) * ' ' + ' | ' + vv['s1_val'] + " " + vv['operator'] + " " + vv['s2_val']
 				print km + ':result' + (length - len(km + ':result')) * ' ' + ' | ' + vv['result']
 				i += 1
 			self.printLine()
