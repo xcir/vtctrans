@@ -348,7 +348,7 @@ class VarnishTest:
 			data['msg']     = data['msg'].replace('TEST ','')
 		
 		if data['type'] == 1:
-			self.addError(data['msg'], ret)
+			self.addError("[" + data['comp'] + "] "+ data['msg'], ret)
 
 		if data['msg'].endswith(' passed'):
 			ret['result']   = 'passed'
@@ -400,6 +400,8 @@ class VarnishTest:
 		if data['msg'].startswith('CLI RX '):
 			data['subcomp'] = 'CLI RX:RES'
 			data['msg'] = data['msg'].replace('CLI RX ','')
+		elif data['type'] == 1:
+			self.addError("[" + data['comp'] + "] "+ data['msg'], ret)
 	
 	# データ正規化用フィルタ
 	def filterData(self, data):
