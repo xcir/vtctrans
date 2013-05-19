@@ -377,6 +377,8 @@ class VarnishTest:
 			self.nowHTTP['server']['body'].append(data['msg'][1:])
 		elif data['subcomp'] == 'EXPECT':
 			data['httpdata'] = copy.deepcopy(self.nowHTTP['server'])
+		if data['type'] == 1:
+			self.addError("[" + data['comp'] + "] "+ data['msg'], ret)
 
 
 	# Clientのフィルタ
@@ -394,13 +396,15 @@ class VarnishTest:
 			self.nowHTTP['client']['body'].append(data['msg'][1:])
 		elif data['subcomp'] == 'EXPECT':
 			data['httpdata'] = copy.deepcopy(self.nowHTTP['client'])
+		if data['type'] == 1:
+			self.addError("[" + data['comp'] + "] "+ data['msg'], ret)
 
 	# Varnishのフィルタ
 	def filterVarnish(self, data, ret):
 		if data['msg'].startswith('CLI RX '):
 			data['subcomp'] = 'CLI RX:RES'
 			data['msg'] = data['msg'].replace('CLI RX ','')
-		elif data['type'] == 1:
+		if data['type'] == 1:
 			self.addError("[" + data['comp'] + "] "+ data['msg'], ret)
 	
 	# データ正規化用フィルタ
