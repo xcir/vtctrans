@@ -11,6 +11,8 @@ def main():
 		
 	opt = ' '.join(argv[1:])
 	r= vtc.execVarnishTest(opt)
+        if(r[0]['result'] != 'passed'):
+                exit(1)
 
 class VarnishTest:
 	# regexp
@@ -521,6 +523,7 @@ class VarnishTest:
 			
 			#出力
 			self.printVTC(v)
+                return r
 
 	def printVTC(self, r):
 		self.printLine('<')
