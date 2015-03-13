@@ -9,7 +9,8 @@ Re-format tool for varnishtest
 
 :Author: Shohei Tanaka(@xcir)
 :Date: 2013-04-30
-:Version: 0.0-alpha2
+:Version: 0.0-alpha2-varnish30
+:Support Varnish Version: 3.0.x
 :Manual section: 1
 
 ATTENTION
